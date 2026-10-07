@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="LitSearch II logo" width="420">
+</p>
+
 # LitSearch II
 
 A literature-search MCP server that needs **no accounts and no API keys**.
