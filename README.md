@@ -57,8 +57,9 @@ Each result says which sources found it (`sources`). If a source is down, the ot
 
 `verify_citation` is built for catching references an AI invented:
 
-- With a DOI it looks the record up in Crossref, then OpenAlex, and compares title, year and authors with what you cited. It also reads Crossref's retraction, withdrawal and removal notices.
+- With a DOI it looks the record up in Crossref, then OpenAlex, and compares title, year, authors and, if you give `--journal`, the journal with what you cited. An abbreviated journal (`N Engl J Med`) matches its full name, and a `RETRACTED:` prefix on the record's title is ignored; both are listed in `accepted_equivalences`. It also reads Crossref's retraction, withdrawal and removal notices.
 - With only a title it needs a near-exact match to report `VERIFIED`; a weaker match comes back as `POSSIBLE_MATCH` with the record it found, never as a verdict.
+- With only a title, a close match whose details disagree is still `METADATA_MISMATCH`, but if the year is more than two years away or the authors do not match, the result also carries `identity_doubts` and a note: without a DOI the record is only the closest title match and may be another edition of the work rather than this citation with wrong details.
 - `NOT_FOUND` is a warning, not proof. A DOI can be new, mistyped, or from a source these services do not index.
 
 ## Try it from a terminal

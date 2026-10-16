@@ -8,6 +8,7 @@ from typing import Any
 
 from .http import Http
 from .identifiers import Identifier
+from .journals import same_journal, strip_notice
 from .models import LitSearchError, Paper, normalise_doi
 from .sources import crossref, openalex
 
@@ -34,11 +35,23 @@ def compare(
     title: str | None,
     authors: list[str] | None,
     year: int | None,
+    journal: str | None = None,
+    notes: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Differences between what was cited and what the record says."""
+    """Differences between what was cited and what the record says.
+
+    Equivalences that were accepted rather than ignored (an abbreviated journal name, a
+    'RETRACTED:' prefix on the record's title) are appended to `notes`.
+    """
     differences: dict[str, Any] = {}
     if title:
         ratio = title_similarity(title, record.title)
+        if ratio < SAME_TITLE and strip_notice(record.title) != record.title:
+            stripped = title_similarity(title, strip_notice(record.title))
+            if stripped >= SAME_TITLE:
+                ratio = stripped
+                if notes is not None:
+                    notes.append("title: retraction or withdrawal prefix ignored")
         if ratio < SAME_TITLE:
             differences["title"] = {
                 "cited": title,
@@ -46,6 +59,12 @@ def compare(
                 "similarity": round(ratio, 3),
                 "note": "probably a typo" if ratio >= NEAR_TITLE else "different title",
             }
+    if journal and record.venue and _norm(journal) != _norm(record.venue):
+        if same_journal(journal, record.venue):
+            if notes is not None:
+                notes.append("journal: abbreviation accepted")
+        else:
+            differences["journal"] = {"cited": journal, "record": record.venue}
     if year and record.year and abs(year - record.year) > 0:
         differences["year"] = {"cited": year, "record": record.year}
     if authors and record.authors:
@@ -60,6 +79,26 @@ def compare(
         elif _family(authors[0]) != _family(record.authors[0]):
             differences["first_author"] = {"cited": authors[0], "record": record.authors[0]}
     return differences
+
+
+YEAR_TOLERANCE = 2
+
+
+def _identity_doubts(differences: dict[str, Any], year: int | None, record: Paper) -> list[str]:
+    """Reasons to doubt that a title-only match is the cited work.
+
+    A large year gap, or authors who share no surname with the record, can mean a different work
+    with the same title (a reprint, a new edition) or a citation with wrong details. On the
+    evaluation corpus the two could not be told apart, so this only labels the result.
+    """
+    doubts = []
+    if "year" in differences and year and record.year and abs(year - record.year) > YEAR_TOLERANCE:
+        doubts.append(f"cited {year}, record {record.year}")
+    if "authors" in differences:
+        doubts.append("no shared surnames")
+    elif "first_author" in differences:
+        doubts.append("first author differs")
+    return doubts
 
 
 async def _retraction_notice(http: Http, doi: str) -> list[dict[str, Any]]:
@@ -80,6 +119,7 @@ async def verify_citation(
     title: str | None = None,
     authors: list[str] | None = None,
     year: int | None = None,
+    journal: str | None = None,
 ) -> dict[str, Any]:
     """Look a citation up in Crossref (then OpenAlex) and report how well it matches."""
     clean_doi = normalise_doi(doi)
@@ -131,13 +171,28 @@ async def verify_citation(
                 "message": "No exact title match. This record is the closest, and may be a "
                 "different work. Check it before treating the citation as verified.",
             }
-    differences = compare(record, title, authors, year)
+    notes: list[str] = []
+    differences = compare(record, title, authors, year, journal, notes)
     result: dict[str, Any] = {
         "status": "METADATA_MISMATCH" if differences else "VERIFIED",
         "how": how,
         "record": record.to_dict(),
         "differences": differences,
     }
+    if notes:
+        result["accepted_equivalences"] = notes
+    if not clean_doi:
+        # Without a DOI the record is only the closest title match. A large year gap or authors
+        # who do not match look the same whether the citation is wrong or the record is another
+        # edition, so the status is kept and the doubt is stated for the reader to weigh.
+        doubts = _identity_doubts(differences, year, record)
+        if doubts:
+            result["identity_doubts"] = doubts
+            result["note"] = (
+                "No DOI was given, so this record is only the closest title match. It may be a "
+                "different edition or work with the same title rather than this citation "
+                "with wrong details."
+            )
     if record.doi:
         try:
             notices = await _retraction_notice(http, record.doi)

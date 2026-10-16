@@ -135,13 +135,16 @@ def create_server(http: Http | None = None) -> MCPServer:
         title: str | None = None,
         authors: list[str] | None = None,
         year: int | None = None,
+        journal: str | None = None,
     ) -> dict[str, Any]:
         """Check that a citation is real and matches its record.
 
-        Returns VERIFIED, METADATA_MISMATCH, RETRACTED or NOT_FOUND. NOT_FOUND is a warning,
-        never proof that a reference was fabricated.
+        Returns VERIFIED, METADATA_MISMATCH, RETRACTED, POSSIBLE_MATCH or NOT_FOUND. NOT_FOUND is
+        a warning, never proof that a reference was fabricated. With no DOI, a METADATA_MISMATCH
+        on a distant year or different authors carries `identity_doubts`: the record may be
+        another edition rather than this citation with wrong details.
         """
-        return await service.verify_citation(client, doi, title, authors, year)
+        return await service.verify_citation(client, doi, title, authors, year, journal)
 
     @server.tool(annotations=_PURE)
     @_guard

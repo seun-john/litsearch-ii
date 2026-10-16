@@ -7,6 +7,7 @@ import pytest
 from litsearch_ii.aggregate import fuse, paper_key
 from litsearch_ii.export import export, to_bibtex
 from litsearch_ii.identifiers import parse_identifier
+from litsearch_ii.journals import same_journal
 from litsearch_ii.models import LitSearchError, Paper, clean_text, normalise_doi, parse_year
 from litsearch_ii.sources.openalex import rebuild_abstract
 from litsearch_ii.verify import compare, title_similarity
@@ -183,6 +184,47 @@ def test_compare_near_title_and_author_order() -> None:
     assert near["title"]["note"] == "probably a typo"
     swapped = compare(record(), None, ["Yoshua Bengio", "Yann LeCun"], None)
     assert "first_author" in swapped and "authors" not in swapped
+
+
+@pytest.mark.parametrize(
+    ("short", "full"),
+    [
+        ("Nat Prod Rep", "Natural Product Reports"),
+        ("J Am Chem Soc", "Journal of the American Chemical Society"),
+        ("N Engl J Med", "New England Journal of Medicine"),
+        ("Eur Respir J", "European Respiratory Journal"),
+        (
+            "Proc Natl Acad Sci U S A",
+            "Proceedings of the National Academy of Sciences of the United States of America",
+        ),
+        ("Proc R Soc B", "Proceedings of the Royal Society B: Biological Sciences"),
+        ("Lancet", "The Lancet"),
+    ],
+)
+def test_journal_abbreviations_are_accepted(short: str, full: str) -> None:
+    assert same_journal(short, full) and same_journal(full, short)
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Nature", "Nature Medicine"),
+        ("Phys Rev A", "Physical Review Applied"),
+        ("Nat Med", "Nature Methods"),
+        ("Cell", "Cell Reports"),
+        ("J Med", "Journal of Mathematics"),
+    ],
+)
+def test_different_journals_are_not_abbreviations(a: str, b: str) -> None:
+    assert not same_journal(a, b) and not same_journal(b, a)
+
+
+def test_compare_ignores_a_retraction_prefix_on_the_record_title() -> None:
+    notes: list[str] = []
+    rec = Paper(title="RETRACTED: Deep learning", authors=["Yann LeCun"], year=2015)
+    assert compare(rec, "Deep learning", None, None, notes=notes) == {}
+    assert notes == ["title: retraction or withdrawal prefix ignored"]
+    assert "title" in compare(rec, "Shallow learning", None, None)
 
 
 def test_title_similarity() -> None:

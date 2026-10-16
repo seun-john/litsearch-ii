@@ -228,8 +228,11 @@ async def verify_citation(
     title: str | None = None,
     authors: list[str] | None = None,
     year: int | None = None,
+    journal: str | None = None,
 ) -> dict[str, Any]:
-    return await verifier.verify_citation(http, doi=doi, title=title, authors=authors, year=year)
+    return await verifier.verify_citation(
+        http, doi=doi, title=title, authors=authors, year=year, journal=journal
+    )
 
 
 def export_bibliography(papers: list[dict[str, Any]], format: str = "bibtex") -> dict[str, Any]:

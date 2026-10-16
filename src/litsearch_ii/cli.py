@@ -45,6 +45,7 @@ def _parser() -> argparse.ArgumentParser:
     verify.add_argument("--title")
     verify.add_argument("--year", type=int)
     verify.add_argument("--author", action="append")
+    verify.add_argument("--journal", help="journal name as cited; abbreviations are accepted")
 
     sub.add_parser("doctor", help="check which sources are reachable right now")
     return parser
@@ -67,7 +68,9 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
         if args.command == "details":
             return await service.paper_details(http, args.identifier)
         if args.command == "verify":
-            return await service.verify_citation(http, args.doi, args.title, args.author, args.year)
+            return await service.verify_citation(
+                http, args.doi, args.title, args.author, args.year, args.journal
+            )
         return await service.doctor(http)
     finally:
         await http.aclose()

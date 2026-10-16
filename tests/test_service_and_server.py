@@ -170,6 +170,80 @@ def test_verify_by_title_needs_a_near_exact_match(full: Mock) -> None:
         run(service.verify_citation(full.http()))
 
 
+def test_title_only_mismatch_with_a_large_year_gap_keeps_its_status_and_states_the_doubt(
+    full: Mock,
+) -> None:
+    result = run(service.verify_citation(full.http(), title="Sleep and exercise", year=1959))
+    assert result["status"] == "METADATA_MISMATCH"
+    assert result["identity_doubts"] == ["cited 1959, record 2020"]
+    assert "closest title match" in result["note"]
+    assert result["differences"]["year"] == {"cited": 1959, "record": 2020}
+
+
+def test_title_only_mismatch_with_unshared_authors_states_the_doubt(full: Mock) -> None:
+    result = run(
+        service.verify_citation(full.http(), title="Sleep and exercise", authors=["Goffman"])
+    )
+    assert result["status"] == "METADATA_MISMATCH"
+    assert result["identity_doubts"] == ["no shared surnames"]
+
+
+def test_title_only_mismatch_with_a_different_first_author_states_the_doubt(full: Mock) -> None:
+    result = run(
+        service.verify_citation(
+            full.http(), title="Sleep and exercise", authors=["Someone, Else", "Lovelace, Ada"]
+        )
+    )
+    assert result["status"] == "METADATA_MISMATCH"
+    assert result["identity_doubts"] == ["first author differs"]
+
+
+def test_title_only_mismatch_with_a_small_year_slip_carries_no_doubt(full: Mock) -> None:
+    result = run(service.verify_citation(full.http(), title="Sleep and exercise", year=2019))
+    assert result["status"] == "METADATA_MISMATCH"
+    assert set(result["differences"]) == {"year"}
+    assert "identity_doubts" not in result
+    clean = run(
+        service.verify_citation(
+            full.http(), title="Sleep and exercise", authors=["Lovelace"], year=2020
+        )
+    )
+    assert clean["status"] == "VERIFIED"
+
+
+def test_a_doi_pins_the_record_so_big_differences_stay_mismatches(full: Mock) -> None:
+    result = run(
+        service.verify_citation(
+            full.http(), doi="10.1/a", title="Sleep and exercise", authors=["Goffman"], year=1959
+        )
+    )
+    assert result["status"] == "METADATA_MISMATCH"
+    assert {"year", "authors"} <= set(result["differences"])
+    assert "identity_doubts" not in result
+
+
+def test_verify_compares_the_journal_and_accepts_abbreviations(full: Mock) -> None:
+    http = full.http()
+    same = run(service.verify_citation(http, doi="10.1/a", journal="J Things"))
+    assert same["status"] == "VERIFIED" and "accepted_equivalences" not in same
+    full_name = run(service.verify_citation(http, doi="10.1/a", journal="Journal of Things"))
+    assert full_name["status"] == "VERIFIED"
+    assert full_name["accepted_equivalences"] == ["journal: abbreviation accepted"]
+    other = run(service.verify_citation(http, doi="10.1/a", journal="Annals of Botany"))
+    assert other["status"] == "METADATA_MISMATCH"
+    assert other["differences"]["journal"] == {"cited": "Annals of Botany", "record": "J Things"}
+
+
+def test_retracted_prefix_on_the_record_title_is_not_a_title_mismatch(mock: Mock) -> None:
+    record = cr_item(title="RETRACTED: Sleep and exercise")
+    record["updated-by"] = [{"type": "retraction", "DOI": "10.1/notice"}]
+    mock.add("api.crossref.org", {"message": record})
+    result = run(service.verify_citation(mock.http(), doi="10.1/a", title="Sleep and exercise"))
+    assert result["status"] == "RETRACTED"
+    assert result["differences"] == {}
+    assert result["accepted_equivalences"] == ["title: retraction or withdrawal prefix ignored"]
+
+
 def test_verify_flags_retractions(mock: Mock) -> None:
     record = cr_item()
     record["updated-by"] = [{"type": "retraction", "DOI": "10.1/notice"}, {"type": "correction"}]
