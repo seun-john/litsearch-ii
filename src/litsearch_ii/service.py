@@ -13,6 +13,8 @@ from typing import Any
 from . import export as exporter
 from . import verify as verifier
 from .aggregate import fuse, merge
+from .coverage import for_search as coverage_for_search
+from .coverage import for_verification as coverage_for_verification
 from .http import Http
 from .identifiers import Identifier, parse_identifier
 from .models import LitSearchError, Paper
@@ -126,6 +128,7 @@ async def search_literature(
         "papers": [p.to_dict() for p in papers],
         "sources_answered": sorted(ranked),
         "warnings": warnings,
+        "coverage": coverage_for_search(chosen, sorted(ranked), warnings),
     }
 
 
@@ -230,9 +233,10 @@ async def verify_citation(
     year: int | None = None,
     journal: str | None = None,
 ) -> dict[str, Any]:
-    return await verifier.verify_citation(
+    result = await verifier.verify_citation(
         http, doi=doi, title=title, authors=authors, year=year, journal=journal
     )
+    return {**result, "coverage": coverage_for_verification(result)}
 
 
 def export_bibliography(papers: list[dict[str, Any]], format: str = "bibtex") -> dict[str, Any]:

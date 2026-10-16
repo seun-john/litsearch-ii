@@ -43,6 +43,60 @@ def test_search_survives_a_failing_source(full: Mock) -> None:
     assert result["warnings"][0]["source"] == "crossref"
 
 
+def test_search_coverage_counts_the_sources_that_answered(full: Mock) -> None:
+    block = run(service.search_literature(full.http(), "sleep exercise", 5))["coverage"]
+    assert (block["unit"], block["items"], block["decided"], block["undecided"]) == (
+        "sources",
+        5,
+        5,
+        0,
+    )
+    assert block["reasons"] == {} and block["notes"] == []
+
+
+def test_search_coverage_names_the_source_that_failed(full: Mock) -> None:
+    full.routes.insert(0, ("api.crossref.org", lambda r: httpx.Response(500)))
+    block = run(service.search_literature(full.http(), "sleep", 5))["coverage"]
+    assert (block["items"], block["decided"], block["undecided"]) == (5, 4, 1)
+    assert block["reasons"] == {"source_failed": 1}
+    assert block["notes"] == ["no answer from: crossref"]
+    assert block["decided"] + block["undecided"] == block["items"]
+
+
+def test_search_coverage_follows_the_sources_asked_for(full: Mock) -> None:
+    block = run(service.search_literature(full.http(), "sleep", 3, sources=["arxiv"]))["coverage"]
+    assert (block["items"], block["decided"]) == (1, 1)
+
+
+def test_verify_coverage_by_status(full: Mock, mock: Mock) -> None:
+    found = run(service.verify_citation(full.http(), "10.1/a", "Sleep and exercise", None, 2020))
+    assert found["coverage"] == {
+        "unit": "citations",
+        "items": 1,
+        "decided": 1,
+        "undecided": 0,
+        "reasons": {},
+        "suppressed": 0,
+        "notes": [],
+    }
+    mismatch = run(service.verify_citation(full.http(), "10.1/a", "Quantum gravity", None, 1990))
+    assert mismatch["status"] == "METADATA_MISMATCH" and mismatch["coverage"]["decided"] == 1
+    missing = run(service.verify_citation(mock.http(), doi="10.9/none"))
+    assert missing["status"] == "NOT_FOUND"
+    assert missing["coverage"]["decided"] == 0
+    assert missing["coverage"]["reasons"] == {"not_found": 1}
+    assert "not proof" in missing["coverage"]["notes"][0]
+    close = run(service.verify_citation(full.http(), title="Sleep and exercise study"))
+    assert close["status"] == "POSSIBLE_MATCH"
+    assert close["coverage"]["reasons"] == {"possible_match": 1}
+
+
+def test_verify_keeps_every_existing_field(full: Mock) -> None:
+    result = run(service.verify_citation(full.http(), "10.1/a", "Sleep and exercise"))
+    for key in ("status", "how", "record", "differences"):
+        assert key in result
+
+
 def test_search_fails_only_when_every_source_fails(mock: Mock) -> None:
     mock.add("", lambda r: httpx.Response(500))
     with pytest.raises(LitSearchError, match="every source failed"):

@@ -53,6 +53,10 @@ If the command is not on your `PATH`, use `python -m litsearch_ii serve` or the 
 
 Each result says which sources found it (`sources`). If a source is down, the others still answer and the failure is listed under `warnings`. Search results are limited to 50 per call.
 
+### Coverage
+
+`search_literature` and `verify_citation` add a `coverage` object to their result (the layout shared by the Trust Tools). For a search the items are the sources asked: one that answered is decided and one that failed is undecided (`source_failed`), with its name in `notes`; the failure is also listed under `warnings`, as before. For a verification there is one item: `VERIFIED`, `METADATA_MISMATCH` and `RETRACTED` are decided; `NOT_FOUND` and `POSSIBLE_MATCH` are undecided, because neither is proof that the citation is real or invented. Existing fields are unchanged.
+
 ### Checking citations
 
 `verify_citation` is built for catching references an AI invented:

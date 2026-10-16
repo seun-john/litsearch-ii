@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `search_literature` and `verify_citation` results have a `coverage` block: sources that answered or failed for a search; whether a record was found and compared for a verification.
 - `verify_citation` / `verify --journal`: the journal is compared with the record's. An abbreviation of the record's journal name is accepted (`accepted_equivalences`); a different journal is a `METADATA_MISMATCH`. The parameter is optional.
 - A `RETRACTED:`, `Retraction:` or `Withdrawn:` prefix on the record's title is ignored when comparing titles.
 - Title-only verification: a `METADATA_MISMATCH` with a year more than two years away, or authors that do not match, now carries `identity_doubts` and a note. The status is unchanged.
